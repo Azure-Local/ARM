@@ -307,27 +307,6 @@
           }
         }
       }
-    },
-    {
-      "type": "Microsoft.Compute/virtualMachines/extensions",
-      "apiVersion": "2022-03-01",
-      "name": "[concat(variables('vm_name'),'/', 'CustomScriptExtension')]",
-      "location": "[resourceGroup().location]",
-      "dependsOn": [
-        "[resourceId('Microsoft.Compute/virtualMachines/', variables('vm_name'))]"
-      ],
-      "properties": {
-        "publisher": "Microsoft.Azure.Extensions",
-        "type": "CustomScript",
-        "typeHandlerVersion": "2.0",
-        "autoUpgradeMinorVersion": true,
-        "settings": {
-          "fileUris": [
-            "https://raw.githubusercontent.com/Azure-Local/Resources/main/Installation/install-vscode.ps1"
-          ],
-          "commandToExecute": "powershell -ExecutionPolicy Unrestricted -File install-vscode.ps1"
-        }
-      }
     }
   ],
   "outputs": {
