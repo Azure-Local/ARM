@@ -1,0 +1,363 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "projectName": {
+      "type": "string",
+      "defaultValue": "app",
+      "metadata": {
+        "description": "The name of the project. This string will be used to name the virtual network."
+      }
+    },
+    "environmentName": {
+      "type": "string",
+      "defaultValue": "dev",
+      "allowedValues": ["sandbox", "dev", "staging", "prod"],
+      "metadata": {
+        "description": "The environment of the virtual network. This string will be used to name the virtual network. (IE: sandbox/dev/staing/prod)"
+      }
+    },
+    "vnetAddressPrefix": {
+      "type": "string",
+      "defaultValue": "10.10.10.0",
+      "metadata": {
+        "description": "The address prefix of the virtual network's address space. (IE: 10.10.10.0)"
+      }
+    },
+    "vnetSubnetMask": {
+      "type": "string",
+      "defaultValue": "/24",
+      "metadata": {
+        "description": "The subnet mask of the virtual network. Format: /# (IE: /24)"
+      }
+    },
+    "PAZAddressPrefix": {
+      "type": "string",
+      "defaultValue": "10.10.10.32",
+      "metadata": {
+        "description": "The adress prefix of the address space. (IE: 10.10.10.32)"
+      }
+    },
+    "PAZSubnetMask": {
+      "type": "string",
+      "defaultValue": "/27",
+      "metadata": {
+        "description": "The subnet mask of the subnet. Format: /# (IE: /27)"
+      }
+    },
+    "vmPurpose": {
+      "type": "string",
+      "defaultValue": "application",
+      "metadata": {
+        "description": "The purpose of the virtual machine. ex: App (application), Data (database)"
+      }
+    },
+    "vmNumber": {
+      "type": "string",
+      "defaultValue": "01",
+      "metadata": {
+        "description": "The number of the virtual machine. This number will be used to name the virtual machine. (ex: 01)"
+      }
+    },
+    "vmSize": {
+      "type": "string",
+      "defaultValue": "Standard_B2S",
+      "metadata": {
+        "description": "The size of the virtual machine. ex: Standard_B2s"
+      }
+    },
+    "vmAdminUsername": {
+      "type": "string",
+      "defaultValue": "admintest",
+      "metadata": {
+        "description": "The username of the default admin account."
+      }
+    },
+    "vmAdminPassword": {
+      "type": "secureString",
+      "metadata": {
+        "description": "The password of the default admin account."
+      }
+    },
+    "vmPublicIpAddressType": {
+      "type": "string",
+      "defaultValue": "static",
+      "allowedValues": ["static", "dynamic"],
+      "metadata": {
+        "description": "The type of the public ip. ex: static or dynamic"
+      }
+    },
+    "vmPublicIpAddressSku": {
+      "type": "string",
+      "defaultValue": "basic",
+      "allowedValues": ["basic", "standard"],
+      "metadata": {
+        "description": "The SKU of the public ip. ex: basic or standard"
+      }
+    },
+    "resourceTags": {
+      "type": "object",
+      "metadata": {
+        "description": "Tags to indicate which resources need to be kept."
+      },
+      "defaultValue": {
+        "Status": "Keep"
+      }
+    }
+  },
+  "functions": [
+    {
+      "namespace": "env",
+      "members": {
+        "transform": {
+          "parameters": [
+            {
+              "name": "env",
+              "type": "string"
+            }
+          ],
+          "output": {
+            "type": "string",
+            "value": "[if(equals(toLower(parameters('env')), 'PROD'), '', concat('-', toLower(parameters('env'))))]"
+          }
+        }
+      }
+    },
+    {
+      "namespace": "name",
+      "members": {
+        "clean": {
+          "parameters": [
+            {
+              "name": "name",
+              "type": "string"
+            }
+          ],
+          "output": {
+            "type": "string",
+            "value": "[replace(replace(replace(parameters('name'), '-', ''), '_', ''), ' ', '')]"
+          }
+        }
+      }
+    }
+  ],
+  "variables": {
+    "vm_name": "[concat(name.clean(parameters('projectName')), '-', parameters('vmNumber'), env.transform(parameters('environmentName')), '-VM')]",
+    "vm_nic": "[concat(name.clean(parameters('projectName')), '-', parameters('vmNumber'), env.transform(parameters('environmentName')), '-NIC')]",
+    "virtual_network_name": "[concat(name.clean(parameters('projectName')), '-', parameters('vmNumber'), env.transform(parameters('environmentName')), '-VNet')]",
+    "virtual_network_address_space": "[concat(parameters('vnetAddressPrefix'), parameters('vnetSubnetMask'))]",
+    "storage_account_name": "[concat(parameters('projectName'), parameters('vmNumber'), parameters('environmentName'), 'storage')]",
+    "paz_subnet_name": "[concat(name.clean(parameters('projectName')), '-PAZ', '-', parameters('vmNumber'), env.transform(parameters('environmentName')), '-SN')]",
+    "paz_address_space": "[concat(parameters('PAZAddressPrefix'), parameters('PAZSubnetMask'))]",
+    "paz_nsg_name": "[concat(name.clean(parameters('projectName')), '-paz', '-', parameters('vmNumber'), env.transform(parameters('environmentName')), '-NSG')]",
+    "vm_publicip": "[concat(name.clean(parameters('projectName')), '-', parameters('vmPurpose'), parameters('vmNumber'), env.transform(parameters('environmentName')), '-PublicIP')]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2022-05-01",
+      "name": "[variables('storage_account_name')]",
+      "tags": "[parameters('resourceTags')]",
+      "location": "[resourceGroup().location]",
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "kind": "Storage",
+      "properties": {}
+    },
+    {
+      "type": "Microsoft.Network/publicIPAddresses",
+      "apiVersion": "2022-05-01",
+      "name": "[variables('vm_publicip')]",
+      "tags": "[parameters('resourceTags')]",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "publicIPAllocationMethod": "[parameters('vmPublicIpAddressType')]"
+      },
+      "sku": {
+        "name": "[parameters('vmPublicIpAddressSku')]"
+      }
+    },
+    {
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "apiVersion": "2022-05-01",
+      "name": "[variables('paz_nsg_name')]",
+      "location": "[resourceGroup().location]",
+      "tags": "[parameters('resourceTags')]",
+      "properties": {
+        "securityRules": [
+          {
+            "name": "default-allow-3389",
+            "properties": {
+              "priority": 1000,
+              "access": "Allow",
+              "direction": "Inbound",
+              "destinationPortRange": "3389",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "*"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworks",
+      "apiVersion": "2022-05-01",
+      "name": "[variables('virtual_network_name')]",
+      "location": "[resourceGroup().location]",
+      "tags": "[parameters('resourceTags')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkSecurityGroups', variables('paz_nsg_name'))]"
+      ],
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": ["[variables('virtual_network_address_space')]"]
+        },
+        "subnets": [
+          {
+            "name": "[variables('paz_subnet_name')]",
+            "properties": {
+              "addressPrefix": "[variables('paz_address_space')]",
+              "networkSecurityGroup": {
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('paz_nsg_name'))]"
+              }
+            }
+          }
+        ],
+        "enableDdosProtection": false,
+        "enableVmProtection": true
+      }
+    },
+    {
+      "type": "Microsoft.Network/networkInterfaces",
+      "apiVersion": "2022-05-01",
+      "name": "[variables('vm_nic')]",
+      "tags": "[parameters('resourceTags')]",
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/publicIpAddresses/', variables('vm_publicip'))]",
+        "[resourceId('Microsoft.Network/virtualNetworks/', variables('virtual_network_name'))]"
+      ],
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "subnet": {
+                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('virtual_network_name'), variables('paz_subnet_name'))]"
+              },
+              "privateIPAllocationMethod": "Dynamic",
+              "publicIpAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIpAddresses', variables('vm_publicip'))]"
+              }
+            }
+          }
+        ],
+        "networkSecurityGroup": {
+          "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('paz_nsg_name'))]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Compute/virtualMachines",
+      "apiVersion": "2022-03-01",
+      "name": "[variables('vm_name')]",
+      "tags": "[parameters('resourceTags')]",
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkInterfaces/', variables('vm_nic'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts/', variables('storage_account_name'))]"
+      ],
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[parameters('vmSize')]"
+        },
+        "storageProfile": {
+          "osDisk": {
+            "createOption": "FromImage",
+            "managedDisk": {
+              "storageAccountType": "Premium_LRS"
+            }
+          },
+          "imageReference": {
+            "publisher": "microsoftwindowsdesktop",
+            "offer": "windows-11",
+            "sku": "win11-21h2-pro",
+            "version": "latest"
+          }
+        },
+        "osProfile": {
+          "computerName": "[variables('vm_name')]",
+          "adminUsername": "[parameters('vmAdminUsername')]",
+          "adminPassword": "[parameters('vmAdminPassword')]"
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('vm_nic'))]"
+            }
+          ]
+        },
+        "diagnosticsProfile": {
+          "bootDiagnostics": {
+            "enabled": true,
+            "storageUri": "[concat('https://', variables('storage_account_name'), '.blob.core.windows.net/')]"
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Compute/virtualMachines/extensions",
+      "apiVersion": "2022-11-01",
+      "name": "[concat(variables('vm_name'),'/', 'CustomScriptExtension')]",
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Compute/virtualMachines/', variables('vm_name'))]"
+      ],
+      "properties": {
+        "publisher": "Microsoft.Azure.Extensions",
+        "type": "CustomScript",
+        "typeHandlerVersion": "2.0",
+        "autoUpgradeMinorVersion": true,
+        "settings": {
+          "fileUris": [
+            "https://raw.githubusercontent.com/Microsoft/vscode-dev-containers/main/script-library/install-vscode.sh"
+          ],
+          "commandToExecute": "bash install-vscode.sh"
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "vnetID": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Network/virtualNetworks', variables('virtual_network_name'))]"
+    },
+    "subnetID": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('virtual_network_name'), variables('paz_subnet_name'))]"
+    },
+    "nsgID": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('paz_nsg_name'))]"
+    },
+    "vmID": {
+      "type": "string",
+      "value": "[concat('Microsoft.Compute/virtualMachines',variables('vm_name'))]"
+    },
+    "nicID": {
+      "type": "string",
+      "value": "[concat('Microsoft.Network/networkInterfaces',variables('vm_nic'))]"
+    },
+    "publicipID": {
+      "type": "string",
+      "value": "[concat('Microsoft.Network/publicIpAddresses',variables('vm_publicip'))]"
+    },
+    "diagstorageaccountID": {
+      "type": "string",
+      "value": "[concat('Microsoft.Storage/storageAccounts',variables('storage_account_name'))]"
+    }
+  }
+}
